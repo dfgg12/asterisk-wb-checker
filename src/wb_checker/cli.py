@@ -17,6 +17,13 @@ SOUNDS_DIR = Path("/var/lib/asterisk/sounds")
 REC_DIR = Path("/var/spool/asterisk/hdtest")
 
 
+def _recordings(rec_dir: Path) -> set[Path]:
+    """Return recording formats supported by the analyzer."""
+    if not rec_dir.is_dir():
+        return set()
+    return set(rec_dir.glob("*.wav")) | set(rec_dir.glob("*.wav16"))
+
+
 def cmd_generate(args: argparse.Namespace) -> int:
     """Write probe tone files."""
     spec = ToneSpec(duration_s=args.duration)
@@ -46,7 +53,7 @@ def cmd_call(args: argparse.Namespace) -> int:
 def cmd_run(args: argparse.Namespace) -> int:
     """Full cycle: call, wait, analyze newest recording."""
     rec_dir = Path(args.rec_dir)
-    before = set(rec_dir.glob("*.wav")) if rec_dir.is_dir() else set()
+    before = _recordings(rec_dir)
     rc = cmd_call(args)
     if rc != 0:
         return rc
@@ -54,10 +61,9 @@ def cmd_run(args: argparse.Namespace) -> int:
     new: list[Path] = []
     while time.monotonic() < deadline:
         time.sleep(2)
-        if rec_dir.is_dir():
-            new = sorted(set(rec_dir.glob("*.wav")) - before)
-            if new:
-                break
+        new = sorted(_recordings(rec_dir) - before)
+        if new:
+            break
     if not new:
         print(f"FAIL no recording appeared in {rec_dir}")
         return 2

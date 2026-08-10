@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
 from wb_checker.analyze import analyze, read_audio
+from wb_checker import cli
 from wb_checker.tonegen import (
     SAMPLE_RATE, ToneSpec, synth_dual_tone, write_sln16, write_wav)
 
@@ -65,3 +67,21 @@ def test_silence_rejected(tmp_path: Path) -> None:
     write_wav(np.zeros(SAMPLE_RATE, dtype=np.int16), wav)
     with pytest.raises(ValueError, match="no usable signal"):
         analyze(wav)
+
+
+def test_run_finds_dialplan_wav16(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Full run finds the .wav16 file produced by the dialplan."""
+    recording = tmp_path / "hdtest-1.wav16"
+
+    def fake_call(_args: object) -> int:
+        recording.touch()
+        return 0
+
+    verdict = SimpleNamespace(is_hd=True, summary=lambda: "HD")
+    monkeypatch.setattr(cli, "cmd_call", fake_call)
+    monkeypatch.setattr(cli, "analyze", lambda *_args, **_kwargs: verdict)
+    monkeypatch.setattr(cli.time, "sleep", lambda _seconds: None)
+    args = SimpleNamespace(rec_dir=str(tmp_path), wait=1, threshold=-20.0)
+
+    assert cli.cmd_run(args) == 0
